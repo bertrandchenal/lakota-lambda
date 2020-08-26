@@ -1,0 +1,17 @@
+<div class="card-body p-0">
+  <table class="table table-borderless table-hover ">
+	<tbody>
+      {% for label in labels%}
+      <tr>
+		<td>{{label}}</td>
+		<td>
+		  <button type="input" class="btn btn-outline-primary btn-sm" hx-get="{{prefix}}/series/{{label}}"
+		  		  hx-target="#series-selection" hx-swap="beforeend">Add</button>
+
+		</td>
+      </tr>
+	  {% endfor %}
+	</tbody>
+  </table>
+</div>
+

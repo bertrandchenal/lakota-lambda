@@ -1,0 +1,74 @@
+
+<div class="card">
+  <form hx-get="{{prefix}}/graph/{{label}}/{{column}}" hx-target="#main">
+	<div class="card-header">
+	  <div class="row">
+		<label class="col-xl-10 col-form-label">{{label}}:{{column}}</label>
+		<div class="col-xl-2">
+		  <div class="d-flex flex-row-reverse bd-highlight">
+			<a class="btn btn-outline-primary" data-toggle="collapse" href="#collapse"
+			   role="button" aria-expanded="false" aria-controls="collapse">
+			  Filters
+			</a>
+		  </div>
+		</div>
+	  </div>
+	</div>
+	<ul class="list-group list-group-flush">
+	  <li class="list-group-item">
+		<div id="viz-{{label}}-{{column}}"></div>
+	  </li>
+	  <li class="list-group-item collapse {{'show' if show_filters else ''}}" id="collapse">
+		<div class="row" >
+		  <div class="col-xl-4" >
+
+			<h4>Horizon</h4>
+			<div class="form-group">
+			  <code for="__date_start">Start</code>
+			  <input type="date" class="form-control" id="__date_start" name="__date_start"
+					 value="{{horizon.get('__date_start')}}">
+			</div>
+			<div class="form-group">
+			  <code for="__date_stop">Stop</code>
+			  <input type="date" class="form-control" id="__date_stop" name="__date_stop"
+					 value="{{horizon.get('__date_stop')}}">
+			</div>
+
+		  </div>
+
+		  <div class="col-xl-4" >
+			{% if inputs %}
+			<h4>Drill Down</h4>
+			{% endif %}
+			{% for name, (default, values) in inputs.items() %}
+			<div class="form-group">
+			  <code for="select-{{name}}">{{name}}</code>
+			  <select class="custom-select" name="{{name}}" id="select-{{name}}">
+				{% for value in values %}
+				{% if value == default %}
+				<option value="{{value}}" selected>{{value}}</option>
+				{% else %}
+				<option value="{{value}}">{{value}}</option>
+				{% endif %}
+				{% endfor %}
+			  </select>
+			</div>
+			{% endfor %}
+		  </div>
+
+		  <div class="col-xl-4">
+			<!-- THIRD COL -->
+			<div class="d-flex flex-row-reverse bd-highlight">
+			  <button class="btn btn-outline-primary">Refresh</button>
+			</div>
+		  </div>
+		</div>
+	  </li>
+	</ul>
+  </form>
+  </div>
+
+  <script type="text/javascript">
+	console.log("{{uri| safe}}")
+	load_graph("{{uri | safe}}", "viz-{{label}}-{{column}}");
+  </script>
