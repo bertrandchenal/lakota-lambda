@@ -12,7 +12,7 @@ configs = {
         "app_name": "jensen-lambda",
         "automatic_layer": True,
         "environment_variables": {
-            "DB_BUCKET": None,
+            "JENSEN_URI": None,
             "APP_TITLE": "Jensen",
             "APP_PREFIX": "/api"
         },
@@ -28,7 +28,7 @@ configs = {
         "version": "2.0",
         "app_name": "jensen-lambda",
         "environment_variables": {
-            "DB_BUCKET": None,
+            "JENSEN_URI": None,
             "APP_TITLE": "Jensen"
         },
         "stages": {
@@ -46,7 +46,7 @@ def config(cli):
     if not cfg:
         print(f'Config not found for stage "{cli.stage}"')
         return
-    cfg['environment_variables']['DB_BUCKET'] = cli.bucket
+    cfg['environment_variables']['JENSEN_URI'] = cli.uri
     print(json.dumps(cfg, indent=4))
 
 
@@ -81,19 +81,22 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
 
-    parser_config = subparsers.add_parser("config", help="Config config files")
+    # CONFIG
+    parser_config = subparsers.add_parser("config", help="Generate config files")
     parser_config.add_argument("stage", default='local',
                                help='Select stage')
     parser_config.add_argument(
-        "--bucket", "-b", help="Bucket holding Jensen DB"
+        "--uri", "-u", help="Jensen URI"
     )
     parser_config.set_defaults(func=config)
 
+    # DEPLOY
     parser_deploy = subparsers.add_parser("deploy", help='Deploy chalice app')
     parser_deploy.add_argument("stage", default='local',
                                help='Set up config and deploy the given stage (local or dev)')
     parser_deploy.set_defaults(func=deploy)
 
+    # TEARDOWN
     parser_teardown = subparsers.add_parser("teardown", help="Delete lambda app and remove buckets")
     parser_teardown.add_argument(
         "--bucket", "-b", nargs="+", help="Bucket to delete"

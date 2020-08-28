@@ -14,10 +14,11 @@ from numpy.core.defchararray import find
 
 logger.setLevel('CRITICAL')
 title = os.environ.get('APP_TITLE', 'Jensen')
-db_bucket = os.environ['DB_BUCKET']
+uri = os.environ['JENSEN_URI']
 app_prefix = os.environ.get('APP_PREFIX', '')
 static_prefix = 'static'
-registry = Registry('file:///tmp/jensen-cache+s3://' + db_bucket)
+registry = Registry(uri)
+
 lib_path = Path(__file__).parent / 'chalicelib'
 tpl_path = lib_path / 'template'
 static_path = lib_path / 'static'
@@ -120,7 +121,8 @@ def graph(label, column):
 
     if schema.idx_len > 1:
         # Prepare aggregation values
-        frm = series.read()
+        # FIXME pre-filter based on param
+        frm = series.limit().frame()
         for name, coldef in schema.idx.items():
             if coldef.dt == 'datetime64[s]':
                 continue
@@ -142,18 +144,10 @@ def graph(label, column):
 # USE a pure lambda ?
 @app.route('/read/{label}/{column}')
 def read(label, column):
-    series = registry.get(label)
-    frm = series.read()
     params = app.current_request.query_params or {}
-
-    # slice timestamp
-    frm = frm[params.get("__date_start", None):params.get("__date_stop", None)]
-
-    # Slice other columns
-    for col, value in params.items():
-        if col not in frm.columns or not value:
-            continue
-        frm = frm.mask(frm[col] == value)
+    series = registry.get(label)
+    start = params.pop("__date_start", None)
+    stop = params.pop("__date_stop", None)
 
     # find time dimension
     tdim = None
@@ -164,6 +158,21 @@ def read(label, column):
     else:
         # No time dimension found
         return
+
+    # Query series
+    extra_cols = tuple(col for col, value in params.items() if value)
+    cols = (tdim, column) + extra_cols
+    cur = series.select(*cols)
+    if start and stop:
+        frm = cur[start:stop]
+    else:
+        frm = cur.limit(100_000)[start:stop]
+
+    # Slice other columns
+    for col, value in params.items():
+        if col not in frm.columns or not value:
+            continue
+        frm = frm.mask(frm[col] == int(value)) # FIXME
 
     # Aggregate on time dimension
     if series.schema.idx_len > 1:
