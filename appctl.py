@@ -2,7 +2,9 @@
 
 import argparse
 import json
+from pathlib import Path
 
+from requests import Session
 from conquer import sh
 
 
@@ -37,9 +39,21 @@ configs = {
             }
         }
     }
-
-
 }
+
+libs = {
+    'js': [
+        'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js',
+        'https://unpkg.com/htmx.org@0.0.8/dist/htmx.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.2/js/bootstrap.bundle.min.js',
+        'https://leeoniya.github.io/uPlot/dist/uPlot.iife.min.js',
+    ],
+    'css': [
+        'https://leeoniya.github.io/uPlot/dist/uPlot.min.css',
+        'https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.2/css/bootstrap.min.css',
+    ]
+}
+
 
 def config(cli):
     cfg = configs.get(cli.stage)
@@ -57,6 +71,21 @@ def deploy(cli):
 
     # Copy config
     sh.cp(f'config-{stage}.json', '.chalice/config.json')
+
+    # Build vendors libs
+    static = Path('chalicelib/static')
+    for ext in libs:
+        vendor = static / f'vendor.{ext}'
+        if vendor.exists():
+            continue
+        session = Session()
+        with vendor.open('wb') as fh:
+            for lib in libs[ext]:
+                print(lib)
+                resp = session.get(lib)
+                resp.raise_for_status()
+                fh.write(resp.content)
+                fh.write(b'\n')
 
     # Run chalice
     if stage == 'local':
