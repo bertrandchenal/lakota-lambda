@@ -1,57 +1,22 @@
 
-function load_graph(uri, elm_id) {
+function load_graph(uri, elm_id, page_len) {
 	const request = new Request(uri);
 	fetch(request)
 		.then(response => response.json())
-		.then(resp => plot(resp, elm_id))
+		.then(resp => plot(resp, elm_id, page_len))
 }
 
-function plot(resp, elm_id) {
-	// let opts = resp.options;
-	// console.log(opts);
-	// for (pos in opts.series) {
-	// 	var series = opts.series[pos];
-	// 	series['value'] = (self, rawValue) => rawValue.toFixed(2);
-	// }
+function plot(resp, elm_id, page_len) {
 	var el = document.getElementById(elm_id);
 	resp.options.width = el.clientWidth;
 	let uplot = new uPlot(resp.options, resp.data, document.getElementById(elm_id));
+
+	// Disable next button
+	console.log(resp.data[0].length);
+	if (resp.data[0].length < page_len) {
+		var btn = document.getElementById('next-btn');
+		if (btn) {
+			btn.setAttribute("disabled", "true");
+		}
+	}
 }
-	// let options = {
-	// 	// title: title,
-	// 	// id: "chart1",
-	// 	// class: "my-chart",
-	// 	width: width,
-	// 	height: width,
-	// 	series: [
-	// 		{},
-	// 		{
-	// 			// initial toggled state (optional)
-	// 			show: true,
-	// 			spanGaps: false,
-	// 			// in-legend display
-	// 			label: "Value1",
-	// 			value: (self, rawValue) => rawValue.toFixed(2),
-
-	// 			// series style
-	// 			stroke: "red",
-	// 			width: 1,
-	// 			fill: "rgba(255, 0, 0, 0.3)",
-	// 			dash: [10, 5],
-	// 		},
-	// 		{
-	// 			// initial toggled state (optional)
-	// 			show: true,
-	// 			spanGaps: false,
-	// 			// in-legend display
-	// 			label: "Value2",
-	// 			value: (self, rawValue) => rawValue.toFixed(2),
-
-	// 			// series style
-	// 			stroke: "green",
-	// 			width: 1,
-	// 			fill: "rgba(0, 255, 0, 0.3)",
-	// 			dash: [10, 5],
-	// 		}
-	// 	],
-	// };

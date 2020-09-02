@@ -19,6 +19,7 @@ app_prefix = os.environ.get('APP_PREFIX', '')
 static_prefix = 'static'
 registry = Registry(uri)
 
+PAGE_LEN = 100_000
 lib_path = Path(__file__).parent / 'chalicelib'
 tpl_path = lib_path / 'template'
 static_path = lib_path / 'static'
@@ -108,37 +109,54 @@ def search():
 def series(label):
     frm = registry.search(label)
     schema = Schema.loads(frm['schema'][0])
-    columns = list(schema.columns.keys())[schema.idx_len:]
+    columns = [c for c in schema.columns if c not in schema.idx]
     return render_template('series.html', label=label, columns=columns)
 
 
 @app.route('/graph/{label}/{column}')
-def graph(label, column):
+@app.route('/graph/{label}/{column}/page/{page}')
+def graph(label, column, page=0):
     params = app.current_request.query_params or {}
     series = registry.get(label)
     schema = series.schema
     inputs = {}
 
-    if schema.idx_len > 1:
+    if len(schema.idx) > 1:
         # Prepare aggregation values
         # FIXME pre-filter based on param
-        frm = series.limit().frame()
+        frm = series.limit(10000).frame()
         for name, coldef in schema.idx.items():
             if coldef.dt == 'datetime64[s]':
                 continue
             values = [''] + sorted(set(frm[name]))
             inputs[name]= [params.get(name, ''), values]
 
-    horizon = {}
-    for field in ('__date_start', '__date_stop'):
-        horizon[field] = params.get(field, '')
+    ui = {
+        'page': 0,
+        'start': None,
+        'stop': None,
+        'page_len': PAGE_LEN,
+    }
+
+    for field in ('start', 'stop'):
+        key = 'ui.' + field
+        value = params.get(key, '')
+        ui[field] = value
+
+    page = int(params.get('ui.page', '0'))
+    active_btn = app.current_request.headers.get('HX-Active-Element-Value')
+    if active_btn:
+        page += 1 if active_btn == 'next' else -1
+        page = max(page, 0)
+        ui['page'] = page
 
     uri = f'{app_prefix}/read/{label}/{column}'
-    if params:
-        uri = uri + '?' + '&'.join(f'{n}={v}' for n, v in params.items())
+    if any(ui.values()):
+        uri = uri + '?' + '&'.join(f'ui.{n}={v}' for n, v in ui.items() if v)
+
     return render_template(
-        'graph.html', uri=uri, label=label, column=column, inputs=inputs, horizon=horizon,
-        show_filters=bool(params))
+        'graph.html', uri=uri, label=label, column=column, inputs=inputs, ui=ui,
+        show_filters=bool(ui['start'] or ui['stop']))
 
 
 # USE a pure lambda ?
@@ -146,8 +164,8 @@ def graph(label, column):
 def read(label, column):
     params = app.current_request.query_params or {}
     series = registry.get(label)
-    start = params.pop("__date_start", None)
-    stop = params.pop("__date_stop", None)
+    start = params.pop("ui.start", None)
+    stop = params.pop("ui.stop", None)
 
     # find time dimension
     tdim = None
@@ -160,13 +178,12 @@ def read(label, column):
         return
 
     # Query series
+    page = int(params.get('ui.page', '0'))
+    offset = page * PAGE_LEN
     extra_cols = tuple(col for col, value in params.items() if value)
     cols = (tdim, column) + extra_cols
     cur = series.select(*cols)
-    if start and stop:
-        frm = cur[start:stop]
-    else:
-        frm = cur.limit(100_000)[start:stop]
+    frm = cur.limit(PAGE_LEN).offset(offset)[start:stop]
 
     # Slice other columns
     for col, value in params.items():
@@ -175,7 +192,7 @@ def read(label, column):
         frm = frm.mask(frm[col] == int(value)) # FIXME
 
     # Aggregate on time dimension
-    if series.schema.idx_len > 1:
+    if len(series.schema.idx) > 1:
         # TODO skip also this step if every index column is filtered
         ts = frm[tdim].astype(int)
         keys, bins = unique(ts, return_inverse=True)
