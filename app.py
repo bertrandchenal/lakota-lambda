@@ -1,30 +1,32 @@
+from uuid import uuid4
+from itertools import chain
 import orjson
 import gzip
 import os
-from base64 import b64encode
+#from base64 import b64encode
 from pathlib import Path
 
 from chalice import Chalice, Response
 from chalice import BadRequestError
-from jensen import Registry, Schema
-from jensen.utils import logger
+from lakota import Repo
+from lakota.utils import logger
 from jinja2 import Environment, FileSystemLoader
-from numpy import bincount, unique
+from numpy import asarray, char
 from numpy.core.defchararray import find
 
 logger.setLevel('CRITICAL')
-title = os.environ.get('APP_TITLE', 'Jensen')
-uri = os.environ['JENSEN_URI']
+title = os.environ.get('APP_TITLE', 'Lakota')
+uri = os.environ.get('LAKOTA_REPO', '.lakota')
 app_prefix = os.environ.get('APP_PREFIX', '')
 static_prefix = 'static'
-registry = Registry(uri)
+repo = Repo(['memory://', uri])
 
-PAGE_LEN = 100_000
+PAGE_LEN = 200_000
 lib_path = Path(__file__).parent / 'chalicelib'
 tpl_path = lib_path / 'template'
 static_path = lib_path / 'static'
 env = Environment(loader=FileSystemLoader([tpl_path]))
-app = Chalice(app_name='jensen-lambda')
+app = Chalice(app_name='lakota-lambda')
 app.api.binary_types.extend(['application/json'])
 
 uplot_options = {
@@ -62,8 +64,9 @@ def render_template(name, **kw):
 
 @app.route('/', methods=['GET', 'HEAD'])
 def index():
-    logo = (static_path / 'jensen-sm.png').open('rb').read()
-    logo = "data:image/png;base64, " + b64encode(logo).decode()
+    # logo = (static_path / 'jensen-sm.png').open('rb').read()
+    # logo = "data:image/png;base64, " + b64encode(logo).decode()
+    logo = ''
     return render_template('index.html', title=title, b64logo=logo)
 
 
@@ -97,27 +100,29 @@ def favico():
 def search():
     params = app.current_request.query_params or {}
     patterns = params.get('label-filter', '').split()
-    frm = registry.search()
-    labels = frm['label']
-    for pattern in patterns:
-        cond = find(labels, pattern) != -1
-        labels = labels[cond]
-    return render_template('search-modal.html', labels=labels)
+    all_labels = []
+    for name in repo.ls():
+        clct = repo / name
+        labels = asarray(clct.ls(), dtype="U")
+        for pattern in patterns:
+            cond = find(char.lower(labels), pattern.lower()) != -1
+            all_labels.extend(f'{name}/{l}' for l in labels[cond])
+    return render_template('search-modal.html', labels=all_labels)
 
 
-@app.route('/series/{label}', methods=['POST', 'GET'])
-def series(label):
-    frm = registry.search(label)
-    schema = Schema.loads(frm['schema'][0])
-    columns = [c for c in schema.columns if c not in schema.idx]
-    return render_template('series.html', label=label, columns=columns)
+@app.route('/series/{collection}/{series}', methods=['POST', 'GET'])
+def series(collection, series):
+    series = series.strip()
+    collection = collection.strip()
+    clct = repo / collection
+    columns = [c for c in clct.schema.columns if c not in clct.schema.idx]
+    return render_template('series.html', label=f'{collection}/{series}', columns=columns)
 
-
-@app.route('/graph/{label}/{column}')
-@app.route('/graph/{label}/{column}/page/{page}')
-def graph(label, column, page=0):
+@app.route('/graph/{collection}/{label}/{column}')
+@app.route('/graph/{collection}/{label}/{column}/page/{page}')
+def graph(collection, label, column, page=0):
     params = app.current_request.query_params or {}
-    series = registry.get(label)
+    series = repo / collection / label
     schema = series.schema
     inputs = {}
 
@@ -135,9 +140,7 @@ def graph(label, column, page=0):
         'page': 0,
         'start': None,
         'stop': None,
-        'page_len': PAGE_LEN,
     }
-
     for field in ('start', 'stop'):
         key = 'ui.' + field
         value = params.get(key, '')
@@ -150,27 +153,53 @@ def graph(label, column, page=0):
         page = max(page, 0)
         ui['page'] = page
 
-    uri = f'{app_prefix}/read/{label}/{column}'
-    if any(ui.values()):
-        uri = uri + '?' + '&'.join(f'ui.{n}={v}' for n, v in ui.items() if v)
+    uri = f'{app_prefix}/read/{collection}/{label}/{column}'
+    new_args = '&'.join(chain(
+        (f'ui.{n}={v}' for n, v in ui.items() if v),
+        (f'{n}={v[0]}' for n, v in inputs.items() if v[0])
+    ))
+    if new_args:
+        uri = uri + '?' + new_args
 
+    # Add param for hidden input
+    ui['page_len'] = PAGE_LEN
     return render_template(
-        'graph.html', uri=uri, label=label, column=column, inputs=inputs, ui=ui,
-        show_filters=bool(ui['start'] or ui['stop']))
+        'graph.html', uri=uri, collection=collection, label=label, column=column, inputs=inputs, ui=ui,
+        show_filters=False, graph_id='graph-' + uuid4().hex[:8])
+
+    # for field in ('start', 'stop'):
+    #     key = 'ui.' + field
+    #     value = params.get(key, '')
+    #     ui[field] = value
+    # page = int(params.get('ui.page', '0'))
+    # active_btn = app.current_request.headers.get('HX-Active-Element-Value')
+    # if active_btn:
+    #     page += 1 if active_btn == 'next' else -1
+    #     page = max(page, 0)
+    #     ui['page'] = page
+    # uri = f'{app_prefix}/read/{label}/{column}'
+    # if any(ui.values()):
+    #     uri = uri + '?' + '&'.join(f'ui.{n}={v}' for n, v in ui.items() if v)
+    # # Add param for hidden input
+    # ui['page_len'] = PAGE_LEN
+    # return render_template(
+    #     'graph.html', uri=uri, label=label, column=column, inputs=inputs, ui=ui,
+    #     show_filters=bool(ui['start'] or ui['stop']))
 
 
 # USE a pure lambda ?
-@app.route('/read/{label}/{column}')
-def read(label, column):
+@app.route('/read/{collection}/{label}/{column}')
+def read(collection, label, column):
     params = app.current_request.query_params or {}
-    series = registry.get(label)
+
+    series = repo / collection / label
     start = params.pop("ui.start", None)
     stop = params.pop("ui.stop", None)
 
     # find time dimension
     tdim = None
     for name, coldef in series.schema.idx.items():
-        if coldef.dt == 'datetime64[s]':
+        if coldef.codec.dt == 'datetime64[s]':
             tdim = name
             break
     else:
@@ -182,8 +211,8 @@ def read(label, column):
     offset = page * PAGE_LEN
     extra_cols = tuple(col for col, value in params.items() if value)
     cols = (tdim, column) + extra_cols
-    cur = series.select(*cols)
-    frm = cur.limit(PAGE_LEN).offset(offset)[start:stop]
+    cols = (tdim, column) + extra_cols
+    frm = series.frame(limit=PAGE_LEN, offset=offset, start=start, stop=stop, select=cols)
 
     # Slice other columns
     for col, value in params.items():
@@ -193,18 +222,17 @@ def read(label, column):
 
     # Aggregate on time dimension
     if len(series.schema.idx) > 1:
-        # TODO skip also this step if every index column is filtered
-        ts = frm[tdim].astype(int)
-        keys, bins = unique(ts, return_inverse=True)
-        res = bincount(bins, weights=frm[column])
-        data = [keys, res]
+        agg_col = f'(sum self.{column})'
+        frm = frm.reduce(tdim, agg_col)
+        data = [frm[tdim].astype(int), frm[agg_col]]
     else:
         data = [frm[tdim].astype(int), frm[column]]
 
     # Build response
     content = orjson.dumps(
         {'data': data, 'options': uplot_options},
-        option=orjson.OPT_SERIALIZE_NUMPY)
+        option=orjson.OPT_SERIALIZE_NUMPY,
+    )
     payload = gzip.compress(content, compresslevel=1)
     headers = {
         'Content-Type': 'application/json',

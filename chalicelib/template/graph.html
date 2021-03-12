@@ -1,6 +1,6 @@
 
 <div class="card">
-  <form hx-get="{{prefix}}/graph/{{label}}/{{column}}" hx-target="#main">
+  <form hx-get="{{prefix}}/graph/{{collection}}/{{label}}/{{column}}" hx-target="#main">
 	<div class="card-header">
 	  <label class="col-form-label">{{label}}:{{column}}</label>
 
@@ -14,7 +14,7 @@
 
 	<ul class="list-group list-group-flush">
 	  <li class="list-group-item">
-		<div id="viz-{{label}}-{{column}}"></div>
+		<div id="{{graph_id}}"></div>
 	  </li>
 	  <li class="list-group-item collapse {{'show' if show_filters else ''}}" id="collapse">
 		<div class="row" >
@@ -73,8 +73,9 @@
 	</div>
   </form>
 </div>
+<a href="{{uri}}">&#123;JSON&#125;</a>
 </div>
 
 <script type="text/javascript">
-  load_graph("{{uri | safe}}", "viz-{{label}}-{{column}}", "{{ui.page_len}}");
+  load_graph("{{uri | safe}}", "{{graph_id}}", "{{ui.page_len}}");
 </script>

@@ -12,7 +12,6 @@ function plot(resp, elm_id, page_len) {
 	let uplot = new uPlot(resp.options, resp.data, document.getElementById(elm_id));
 
 	// Disable next button
-	console.log(resp.data[0].length);
 	if (resp.data[0].length < page_len) {
 		var btn = document.getElementById('next-btn');
 		if (btn) {

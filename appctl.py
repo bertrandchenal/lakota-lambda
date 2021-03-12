@@ -41,6 +41,41 @@ configs = {
     }
 }
 
+policy = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": [
+                "arn:aws:s3:::e34302a0-6538-4773-b356-166a26c1b243/*"
+            ],
+            "Sid": "getbucket"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+            "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::e34302a0-6538-4773-b356-166a26c1b243"
+            ],
+        "Sid": "listbucket"
+        },              {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*",
+            "Sid": "lambdalogs"
+        }
+    ]
+}
+
+
+
 libs = {
     'js': [
         'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js',
@@ -60,8 +95,30 @@ def config(cli):
     if not cfg:
         print(f'Config not found for stage "{cli.stage}"')
         return
-    cfg['environment_variables']['JENSEN_URI'] = cli.uri
+    if cli.kind == 'config':
+        cfg['environment_variables']['JENSEN_URI'] = cli.uri
     print(json.dumps(cfg, indent=4))
+
+
+def policy(cli):
+    # plc = policy.get(cli.stage)
+    # if not cfg:
+    #     print(f'Policy not found for stage "{cli.stage}"')
+    #     return
+    # Search for bucket in uri
+    buckets = []
+    for uri in cli.uri.split('+'):
+        if not '://' in uri:
+            continue
+        protocol, path = uri.split("://", 1)
+        if protocol != 's3':
+            continue
+        buckets.append(path)
+    if not buckets:
+        return
+
+    # Format policy dict
+
 
 
 def deploy(cli):
@@ -87,6 +144,8 @@ def deploy(cli):
                 fh.write(resp.content)
                 fh.write(b'\n')
 
+    # TODO policy
+
     # Run chalice
     if stage == 'local':
         res = sh.chalice.bg('local')
@@ -102,8 +161,8 @@ def teardown(cli):
     for name in cli.bucket:
         print('Delete bucket', name)
         sh.aws('s3', 'rb', f's3://{name}', '--force')
-        print('delete chalice app')
-        sh.chalice('delete')
+    print('delete chalice app')
+    sh.chalice('delete')
 
 
 def main():
