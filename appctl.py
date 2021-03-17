@@ -11,11 +11,11 @@ from conquer import sh
 configs = {
     "dev": {
         "version": "2.0",
-        "app_name": "jensen-lambda",
+        "app_name": "lakota-lambda",
         "automatic_layer": True,
         "environment_variables": {
-            "JENSEN_URI": None,
-            "APP_TITLE": "Jensen",
+            "LAKOTA_URI": None,
+            "APP_TITLE": "Lakota",
             "APP_PREFIX": "/api"
         },
         "stages": {
@@ -28,10 +28,10 @@ configs = {
     },
     "local": {
         "version": "2.0",
-        "app_name": "jensen-lambda",
+        "app_name": "lakota-lambda",
         "environment_variables": {
-            "JENSEN_URI": None,
-            "APP_TITLE": "Jensen"
+            "LAKOTA_URI": None,
+            "APP_TITLE": "Lakota"
         },
         "stages": {
             "dev": {
@@ -41,14 +41,14 @@ configs = {
     }
 }
 
-policy = {
+policy = '''{
     "Version": "2012-10-17",
     "Statement": [
         {
             "Effect": "Allow",
             "Action": ["s3:GetObject"],
             "Resource": [
-                "arn:aws:s3:::e34302a0-6538-4773-b356-166a26c1b243/*"
+                "arn:aws:s3:::{bucket}/*"
             ],
             "Sid": "getbucket"
         },
@@ -58,7 +58,7 @@ policy = {
             "s3:ListBucket"
             ],
             "Resource": [
-                "arn:aws:s3:::e34302a0-6538-4773-b356-166a26c1b243"
+                "arn:aws:s3:::{bucket}"
             ],
         "Sid": "listbucket"
         },              {
@@ -72,7 +72,7 @@ policy = {
             "Sid": "lambdalogs"
         }
     ]
-}
+}'''
 
 
 
@@ -96,7 +96,7 @@ def config(cli):
         print(f'Config not found for stage "{cli.stage}"')
         return
     if cli.kind == 'config':
-        cfg['environment_variables']['JENSEN_URI'] = cli.uri
+        cfg['environment_variables']['LAKOTA_URI'] = cli.uri
     print(json.dumps(cfg, indent=4))
 
 
@@ -174,7 +174,7 @@ def main():
     parser_config.add_argument("stage", default='local',
                                help='Select stage')
     parser_config.add_argument(
-        "--uri", "-u", help="Jensen URI"
+        "--uri", "-u", help="Lakota URI"
     )
     parser_config.set_defaults(func=config)
 
