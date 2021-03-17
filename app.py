@@ -3,7 +3,7 @@ from itertools import chain
 import orjson
 import gzip
 import os
-#from base64 import b64encode
+from urllib.parse import unquote
 from pathlib import Path
 
 from chalice import Chalice, Response
@@ -19,7 +19,7 @@ title = os.environ.get('APP_TITLE', 'Lakota')
 uri = os.environ.get('LAKOTA_REPO', '.lakota')
 app_prefix = os.environ.get('APP_PREFIX', '')
 static_prefix = 'static'
-repo = Repo(['memory://', uri])
+repo = Repo(['/tmp/lakota-cache', uri])
 
 PAGE_LEN = 200_000
 lib_path = Path(__file__).parent / 'chalicelib'
@@ -112,8 +112,8 @@ def search():
 
 @app.route('/series/{collection}/{series}', methods=['POST', 'GET'])
 def series(collection, series):
-    series = series.strip()
-    collection = collection.strip()
+    series = unquote(series).strip()
+    collection = unquote(collection).strip()
     clct = repo / collection
     columns = [c for c in clct.schema.columns if c not in clct.schema.idx]
     return render_template('series.html', label=f'{collection}/{series}', columns=columns)
@@ -121,6 +121,10 @@ def series(collection, series):
 @app.route('/graph/{collection}/{label}/{column}')
 @app.route('/graph/{collection}/{label}/{column}/page/{page}')
 def graph(collection, label, column, page=0):
+    collection = unquote(collection).strip()
+    label = unquote(label).strip()
+    column = unquote(column).strip()
+
     params = app.current_request.query_params or {}
     series = repo / collection / label
     schema = series.schema
@@ -190,6 +194,9 @@ def graph(collection, label, column, page=0):
 # USE a pure lambda ?
 @app.route('/read/{collection}/{label}/{column}')
 def read(collection, label, column):
+    collection = unquote(collection).strip()
+    label = unquote(label).strip()
+    column = unquote(column).strip()
     params = app.current_request.query_params or {}
 
     series = repo / collection / label
