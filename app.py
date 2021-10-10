@@ -21,7 +21,7 @@ app_prefix = os.environ.get('APP_PREFIX', '')
 static_prefix = 'static'
 repo = Repo(['/tmp/lakota-cache', uri])
 
-PAGE_LEN = 200_000
+PAGE_LEN = 20_000
 lib_path = Path(__file__).parent / 'chalicelib'
 tpl_path = lib_path / 'template'
 static_path = lib_path / 'static'
@@ -133,9 +133,9 @@ def graph(collection, label, column, page=0):
     if len(schema.idx) > 1:
         # Prepare aggregation values
         # FIXME pre-filter based on param
-        frm = series.limit(10000).frame()
+        frm = series.frame(limit=10000)
         for name, coldef in schema.idx.items():
-            if coldef.dt == 'datetime64[s]':
+            if coldef.codec.dt == 'datetime64[s]':
                 continue
             values = [''] + sorted(set(frm[name]))
             inputs[name]= [params.get(name, ''), values]
@@ -167,28 +167,29 @@ def graph(collection, label, column, page=0):
 
     # Add param for hidden input
     ui['page_len'] = PAGE_LEN
-    return render_template(
-        'graph.html', uri=uri, collection=collection, label=label, column=column, inputs=inputs, ui=ui,
-        show_filters=False, graph_id='graph-' + uuid4().hex[:8])
+    # return render_template(
+    #     'graph.html', uri=uri, collection=collection, label=label, column=column, inputs=inputs, ui=ui,
+    #     show_filters=False, graph_id='graph-' + uuid4().hex[:8])
 
-    # for field in ('start', 'stop'):
-    #     key = 'ui.' + field
-    #     value = params.get(key, '')
-    #     ui[field] = value
-    # page = int(params.get('ui.page', '0'))
-    # active_btn = app.current_request.headers.get('HX-Active-Element-Value')
-    # if active_btn:
-    #     page += 1 if active_btn == 'next' else -1
-    #     page = max(page, 0)
-    #     ui['page'] = page
-    # uri = f'{app_prefix}/read/{label}/{column}'
+    for field in ('start', 'stop'):
+        key = 'ui.' + field
+        value = params.get(key, '')
+        ui[field] = value
+    page = int(params.get('ui.page', '0'))
+    active_btn = app.current_request.headers.get('HX-Active-Element-Value')
+    if active_btn:
+        page += 1 if active_btn == 'next' else -1
+        page = max(page, 0)
+        ui['page'] = page
+    # uri = f'{app_prefix}/read/{collection}/{label}/{column}'
     # if any(ui.values()):
     #     uri = uri + '?' + '&'.join(f'ui.{n}={v}' for n, v in ui.items() if v)
-    # # Add param for hidden input
-    # ui['page_len'] = PAGE_LEN
-    # return render_template(
-    #     'graph.html', uri=uri, label=label, column=column, inputs=inputs, ui=ui,
-    #     show_filters=bool(ui['start'] or ui['stop']))
+    # Add param for hidden input
+    ui['page_len'] = PAGE_LEN
+    return render_template(
+        'graph.html', uri=uri, collection=collection, label=label, column=column,
+        inputs=inputs, ui=ui, graph_id='graph-' + uuid4().hex[:8],
+        show_filters=bool(ui['start'] or ui['stop']))
 
 
 # USE a pure lambda ?
@@ -225,7 +226,7 @@ def read(collection, label, column):
     for col, value in params.items():
         if col not in frm.columns or not value:
             continue
-        frm = frm.mask(frm[col] == int(value)) # FIXME
+        frm = frm.mask(frm[col] == value) # FIXME
 
     # Aggregate on time dimension
     if len(series.schema.idx) > 1:

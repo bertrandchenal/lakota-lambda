@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+import os
 import argparse
 import json
 from pathlib import Path
@@ -95,9 +96,12 @@ def config(cli):
     if not cfg:
         print(f'Config not found for stage "{cli.stage}"')
         return
-    if cli.kind == 'config':
+    if cli.uri:
         cfg['environment_variables']['LAKOTA_URI'] = cli.uri
-    print(json.dumps(cfg, indent=4))
+
+    os.makedirs('.chalice', exist_ok=True)
+    with open('.chalice/config.json', 'w') as fh:
+        fh.write(json.dumps(cfg, indent=4))
 
 
 def policy(cli):

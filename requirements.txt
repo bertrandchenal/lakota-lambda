@@ -2,4 +2,5 @@ lakota
 chalice
 jinja2
 orjson
-s3fs
+requests
+conquer
